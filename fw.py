@@ -182,19 +182,6 @@ def unpage_seq(fetch, num=200):
             yield item
         offset = offset + limit
 
-def jsonpath(p):
-    def w(k):
-        if callable(k):
-            return k(p)
-        for k in k.split("."):
-            try:
-                p = p[k]
-            except KeyError:
-                return None
-        return p
-    return w
-
-
 def main():
     app.debug = settings.DEBUG if hasattr(settings, "DEBUG") else False
     http_server = WSGIServer(("", 5000), app, handler_class=WebSocketHandler)
@@ -205,5 +192,4 @@ def shell():
     shell((settings.FB_APP_ID, settings.FB_SECRET))
 
 if __name__ == "__main__":
-    werkzeug.serving.run_with_reloader(main)()
-
+    pass

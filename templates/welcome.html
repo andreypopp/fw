@@ -9,9 +9,17 @@
     {% block body %}
     {% endblock body %}
     <script>
+      window.settings = {
+        fbAppId: '{{ settings.FB_APP_ID }}',
+        waveEndpoint: 'ws://' + '{{ settings.HOST }}:80' + '/wave',
+      };
+		</script>
+    <script src="/static/jquery.js"></script>
+    <script src="/static/friendwave.js"></script>
+	  <script>
       window.fbAsyncInit = function() {
         FB.init({
-          appId      : '{{ settings.FB_APP_ID }}',
+          appId      : settings.fbAppId,
           status     : true,
           cookie     : true,
           xfbml      : true,
