@@ -15,5 +15,6 @@ setup(
     zip_safe=False,
     install_requires=requires,
     entry_points="""
-    # -*- Entry points: -*-
+    [console_scripts]
+    fw = fw:main
     """)
