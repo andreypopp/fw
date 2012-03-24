@@ -5,8 +5,10 @@ monkey.patch_all()
 from gevent_psycopg2 import monkey_patch
 monkey_patch()
 
+import logging
 import collections
 import simplejson as json
+from datetime import datetime
 
 from flask import Flask, render_template, request, abort
 from gevent import pool, spawn
@@ -14,14 +16,17 @@ from gevent.pywsgi import WSGIServer
 from gevent.queue import Queue
 from geventwebsocket.handler import WebSocketHandler
 from sqlalchemy import create_engine
-import werkzeug.serving
+from werkzeug.serving import run_with_reloader
 
 import facebook
 import settings
 
 __all__ = ("app", "main")
 
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger("fw")
 app = Flask(__name__)
+app.config.from_object("settings")
 fb = facebook.API(settings.FB_APP_ID, settings.FB_SECRET)
 engine = create_engine(settings.DATABASE_URI)
 
@@ -37,15 +42,17 @@ class DB(object):
         self.c = engine.connect()
 
     def friends(self, uid):
-        return list(self.c.execute("select fid from fw.f where uid = %s", uid))
+        return [User(row[0], None) for row
+                in self.c.execute("select fid from fw.f where uid = %s", uid)]
 
     def store_friends(self, uid, fids):
-        self.c.execute(
-            "insert into fw.f (uid, fid) values (%s, %s)",
-            [(uid, fid) for fid in fids])
+        with self.c.begin() as t:
+            self.c.execute(
+                "insert into fw.f (uid, fid) values (%s, %s)",
+                [(uid, fid) for fid in fids])
 
     def match_song(self, sid):
-        return self.c.execute("select * fw.match_song(%s)", sid).first()
+        return self.c.execute("select * from fw.match_song(%s)", sid).first()
 
     def has_song(self, sid):
         return (
@@ -53,21 +60,23 @@ class DB(object):
             .scalar())
 
     def store_song(self, song):
-        self.c.execute("""
-            insert into fw.s (sid, title, artist_name, site_name)
-            values(%s, %s, %s, %s)""",
-            song.sid, song.title, song.artist_name, song.site_name)
+        with self.c.begin() as t:
+            self.c.execute("""
+                insert into fw.s (sid, title, artist_name, site_name)
+                values(%s, %s, %s, %s)""",
+                song.sid, song.title, song.artist_name, song.site_name)
 
     def last_listen(self, uid):
         return (self.c
             .execute("select max(ts) from fw.l where uid = %s", uid)
-            .first())
+            .scalar())
 
     def store_listen(self, listen):
-        self.c.execute("""
-            insert into fw (lid, uid, sid, ts)
-            values (%s, %s, %s, %s)""",
-            listen.lid, listen.uid, listen.sid, listen.ts)
+        with self.c.begin() as t:
+            self.c.execute("""
+                insert into fw.l (lid, uid, sid, ts)
+                values (%s, %s, %s, %s)""",
+                listen.lid, listen.uid, listen.sid, listen.ts)
 
     def listens(self, uid, ts):
         for r in self.c.execute("select * from fw.l where ts >= %s", ts):
@@ -84,43 +93,47 @@ def welcome():
 def wave():
     if not "wsgi.websocket" in request.environ:
         return abort(400)
-    if not "id" in request.args or not "access_token" in request.args:
+    if not "userId" in request.args or not "accessToken" in request.args:
         return abort(400)
-    u = User(request.args["id"], request.args["access_token"])
+    u = User(request.args["userId"], request.args["accessToken"])
     ws = request.environ["wsgi.websocket"]
     for item in wave_for(u):
+        log.debug("sending: %s", item)
         ws.send(json.dumps(item))
 
-def wave_for(u, result=None):
+def wave_for(u, results=None):
+    log.debug("start generating waves for %s", u.uid)
     if results is None:
         results = Queue()
-    def listens():
-        db = DB()
 
+    def listens():
+        log.debug("start getting friends for %s", u.uid)
+        db = DB()
         # friends
         friends = db.friends(u.uid)
         if not friends:
             friends = [User(x["id"], u.access_token) for x
-                in unpage(fb.me.using(u.access_token).friends.get)]
+                in unpage_par(fb.me.using(u.access_token).friends.get)]
             db.store_friends(u.uid, [f.uid for f in friends])
-            db.commit()
+        friends = [f._replace(access_token=u.access_token) for f in friends]
 
         # friend listens
         def user_listens(u):
+            log.debug("start getting listens for %s", u.uid)
             db = DB()
 
-            def listens_for(u, num=200):
+            def listens_for(u, num=2):
                 last_ts = db.last_listen(u.uid)
                 for listen in unpage_seq(
-                        fb[u.uid]["music.listens"].using(u.token).get,
+                        fb[u.uid]["music.listens"].using(u.access_token).get,
                         num):
                     ts = fb_datetime(listen.get("end_time"))
-                    if last_ts >= ts:
+                    if last_ts and last_ts >= ts:
                         break
                     listen = Listen(
                         lid=listen.get("id"),
                         uid=u.uid,
-                        sid=listen.get("song", {}).get("id"),
+                        sid=listen.get("data", {}).get("song", {}).get("id"),
                         ts=ts)
                     db.store_listen(listen)
                     yield listen
@@ -128,9 +141,9 @@ def wave_for(u, result=None):
                     yield listen
 
             for listen in listens_for(u):
-                if not has_song(listen.sid):
+                if not db.has_song(listen.sid):
                     db.store_song(song(listen.sid, u.access_token))
-                t = db.song(listen.sid)
+                t = db.match_song(listen.sid)
                 if t:
                     results.put({
                         "src": t.surl,
@@ -151,11 +164,11 @@ def song(sid, access_token):
     return Song(
         sid=sid,
         title=data.get("title"),
-        artist_name=data.get("musician")[0].get("name"),
+        artist_name=data.get("data", {}).get("musician", [{}])[0].get("name"),
         site_name=data.get("site_name"))
 
 def fb_datetime(v):
-    return datetime.strptime("%Y-%m-%dT%H:%M:%S+0000", v) if v else None
+    return datetime.strptime(v, "%Y-%m-%dT%H:%M:%S+0000") if v else None
 
 def pmap(func, lst):
     l = len(lst)
@@ -182,9 +195,10 @@ def unpage_seq(fetch, num=200):
             yield item
         offset = offset + limit
 
+@run_with_reloader
 def main():
     app.debug = settings.DEBUG if hasattr(settings, "DEBUG") else False
-    http_server = WSGIServer(("", 5000), app, handler_class=WebSocketHandler)
+    http_server = WSGIServer(("0.0.0.0", 5000), app, handler_class=WebSocketHandler)
     http_server.serve_forever()
 
 def shell():
@@ -192,4 +206,4 @@ def shell():
     shell((settings.FB_APP_ID, settings.FB_SECRET))
 
 if __name__ == "__main__":
-    pass
+    main()
