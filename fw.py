@@ -11,10 +11,10 @@ fb = facebook.API(settings.FB_APP_ID, settings.FB_SECRET)
 
 @app.route("/")
 def welcome():
-    return render_template("welcome.html")
+    return render_template("welcome.html", settings=settings)
 
 def main():
-    app.run()
+    app.run(debug=True)
 
 if __name__ == "__main__":
     main()
