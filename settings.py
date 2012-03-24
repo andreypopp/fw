@@ -1,2 +1,2 @@
-FB_APP_ID = NotImplemented
-FB_SECRET = NotImplemented
+FB_APP_ID = "372926196075013"
+FB_SECRET = "bf32de4c09ed740b6556cf98b08c8763"
