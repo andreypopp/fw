@@ -4,3 +4,5 @@ Cython
 simplejson
 urllib3
 gevent_websocket
+gevent_psycopg2
+sqlalchemy
