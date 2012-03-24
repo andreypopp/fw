@@ -3,3 +3,4 @@ Cython
 -e git+https://github.com/schmir/gevent.git#egg=gevent
 simplejson
 urllib3
+gevent_websocket
