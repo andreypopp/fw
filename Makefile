@@ -12,3 +12,7 @@ reqs:
 
 serve:
 	python ./fw.py
+
+_recreate:
+	psql -dzvooq -c "drop schema if exists fw cascade;"
+	psql -dzvooq < friendwave.sql

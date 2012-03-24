@@ -47,7 +47,7 @@ __all__ = (
     "API", "OpenGraphLocation", "create_facebook",
     "retry_on_error", "shell", "api",)
 
-log = logging.getLogger("zvooq.facebook")
+log = logging.getLogger("facebook")
 
 class cached_property(object):
 
@@ -600,15 +600,46 @@ class BatchCall(RequestHandler, LocationAware):
 ResponseLike = collections.namedtuple(
     "ResponseLike", ["status", "headers", "data"])
 
-def shell():
-    """ Entry point ot interactive Facebook API shell
+def make_shell(namespace=None, banner=None, use_ipython=True):
+    """Returns an action callback that spawns a new interactive
 
-    Exposed as `fbsh` executable script, namespace includes initialized `api`
-    object of type :class:`.API`.
+    :keyword namespace:
+        the optional namespace object which would be represent globals
+    :keyword banner:
+        the banner that is displayed before the shell.  If not specified a
+        generic banner is used instead
+    :keyword use_ipython:
+        if set to `True` ipython is used if available
+
+    :copyright: (c) 2011 by the Werkzeug Team, see AUTHORS for more details.
+    :license: BSD, see LICENSE for more details.
     """
+    if banner is None:
+        banner = ""
+    if namespace is None:
+        namespace = {}
+    namespace = namespace
+    if use_ipython:
+        try:
+            try:
+                from IPython.frontend.terminal.embed \
+                    import InteractiveShellEmbed
+                sh = InteractiveShellEmbed(banner1=banner)
+            except ImportError:
+                from IPython.Shell import IPShellEmbed
+                sh = IPShellEmbed(banner=banner)
+        except ImportError:
+            pass
+        else:
+            sh(global_ns={}, local_ns=namespace)
+            return
+    from code import interact
+    interact(banner, local=namespace)
+
+def shell(app=None):
+    """ Entry point ot interactive Facebook API shell"""
     import sys
     import optparse
-    from zvooq.utils import make_shell
 
     p = optparse.OptionParser(usage="%s [OPTIONS] APP_ID APP_SECRET" % \
             sys.argv[0])
@@ -621,14 +652,18 @@ def shell():
         level=logging.INFO if options.verbose else logging.WARNING,
         format="%(levelname)s: %(name)s: %(message)s")
 
-    if len(args) < 2:
+    if len(args) < 2 and not app:
         print >> sys.stderr, "error: provide APP_ID and APP_SECRET as arguments"
         sys.exit(1)
+    elif not app:
+        app_id = args[0]
+        app_secret = args[1]
+    else:
+        app_id, app_secret = app
 
-    api = API(args[0], args[1], access_token=options.access_token)
+
+    api = API(app_id, app_secret, access_token=options.access_token)
 
     make_shell(
-        namespace={
-            "api": api
-        },
+        namespace={"api": api},
         banner="Facebook API Shell\n")

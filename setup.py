@@ -17,4 +17,5 @@ setup(
     entry_points="""
     [console_scripts]
     fw = fw:main
+    fwshell = fw:shell
     """)
