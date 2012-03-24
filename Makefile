@@ -1,3 +1,5 @@
+all: serve
+
 install test clean:
 	python setup.py $@
 
