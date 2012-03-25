@@ -107,7 +107,9 @@ class DB(object):
     def listens(self, uid, ts):
         with self.connect() as c:
             return [Listen(**r) for r
-                in c.execute("select lid, uid, sid, ts from fw.l where ts >= %s", ts)]
+                in c.execute("""
+                    select lid, uid, sid, ts from fw.l
+                    where uid = %s and ts >= %s""", uid, ts)]
 
 @app.route("/wave")
 def wave():
