@@ -75,7 +75,9 @@ class DB(object):
             with c.begin() as t:
                 c.execute("""
                     insert into fw.s (sid, title, artist_name, site_name)
-                    values(%s, %s, %s, %s)""",
+                    select q.* from (select %s::text sid, %s::text title,
+                    %s::text artist_name, %s::text as site_name) q
+                    left join fw.s using(sid) where s.sid is null""",
                     song.sid, song.title, song.artist_name, song.site_name)
 
     def last_listen(self, uid):
@@ -95,7 +97,10 @@ class DB(object):
                 for listen in listens:
                     c.execute("""
                         insert into fw.l (lid, uid, sid, ts, cts)
-                        values (%s, %s, %s, %s, %s)""",
+                        select q.* from (
+                            select %s::text lid, %s::text uid, %s::text sid,
+                            %s::timestamp ts, %s::timestamp cts) q
+                            left join fw.l using(lid) where l.lid is null""",
                         listen.lid, listen.uid, listen.sid, listen.ts,
                         datetime.now())
 
