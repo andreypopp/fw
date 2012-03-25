@@ -1,31 +1,24 @@
 <html>
   <head>
-    <link rel="stylesheet" href="/static/style.css"/>
-    {% block head %}
-    {% endblock head %}
+    <link rel="stylesheet" href="static/friendwave.css"/>
   </head>
   <body>
-    <div id="fb-root"></div>
-    {% block body %}
-    {% endblock body %}
-    <script>
-      window.settings = {
-        fbAppId: '{{ settings.FB_APP_ID }}',
-        waveEndpoint: 'ws://' + '{{ settings.HOST }}:80' + '/wave',
-      };
-		</script>
-    <script src="/static/jquery.js"></script>
-    <script src="/static/friendwave.js"></script>
-	  <script>
-      window.fbAsyncInit = function() {
-        FB.init({
-          appId      : settings.fbAppId,
-          status     : true,
-          cookie     : true,
-          xfbml      : true,
-          oauth      : true,
-        });
-      };
+  	<div class="fb-login-button" data-scope="email,user_about_me,user_activities,friends_about_me,user_likes,friends_likes,user_interests,friends_interests,user_actions.music,friends_actions.music">Login with Facebook</div>
+
+<div id="currPhoto"></div>
+<div id="nextPhoto"></div>
+
+<div id="currTrack"></div>
+<div id="nextTrack"></div>
+
+<div id="playlist"></div>
+
+	<div id="fb-root"></div>
+    <script src="static/jquery.js"></script>
+    <script src="static/friendwave.js"></script>
+	<script src="tools.js"></script>
+	<script src="player.js"></script>
+	<script>
       (function(d){
           var js, id = 'facebook-jssdk'; if (d.getElementById(id)) {return;}
           js = d.createElement('script'); js.id = id; js.async = true;
@@ -33,7 +26,55 @@
           d.getElementsByTagName('head')[0].appendChild(js);
         }(document));
     </script>
-    <div class="fb-login-button"
-      data-scope="email,user_about_me,user_activities,friends_about_me,user_likes,friends_likes,user_interests,friends_interests,user_actions.music,friends_actions.music">Login with Facebook</div>
+	<script>
+		function doStuff(response) {
+			$('.fb-login-button').hide();
+			var uid = response.authResponse.userID;
+			var accessToken = response.authResponse.accessToken;
+			var started = false;
+			var count = 0;
+			var a = new WebSocket('ws://zvooq.ru:5000/wave?accessToken=' + accessToken + '&userId=' + uid);
+			a.onmessage = function(m) {
+				count = count + 1;
+				var data = jQuery.parseJSON(m.data);
+				//console.log(data);
+				player.addTrack(data);
+				if (!started && count > 1) {
+					player.start();
+					started = true;
+				}
+			};
+		}
+      window.settings = {
+        fbAppId: '372926196075013',
+        waveEndpoint: 'zvooq.ru/friendwave/wave'
+      };
+	  window.fbAsyncInit = function() {
+	  	console.log('fbAsyncInit');
+        FB.init({
+          appId      : settings.fbAppId,
+          status     : true,
+          cookie     : true,
+          xfbml      : true,
+          oauth      : true,
+        });
+		FB.getLoginStatus(function(response) {
+			//console.log(response);
+			if (response.status === 'connected') {
+			    // the user is logged in and has authenticated your
+			    // app, and response.authResponse supplies
+			    // the user's ID, a valid access token, a signed
+			    // request, and the time the access token 
+			    // and signed request each expire
+			    doStuff(response);
+			  }
+		});
+		FB.Event.subscribe('auth.login', function(response) {
+		     if (response.status === 'connected') {
+			    doStuff(response);
+			  }
+		});
+      };
+	</script>
   </body>
 </html>
