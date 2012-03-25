@@ -147,9 +147,9 @@ class UserTracker(object):
 
     def subscribe(self, uid, access_token):
         results = PriorityQueue()
-        ts, subscribers = self.users.get(uid, (datetime.now(), []))
+        im, ts, subscribers = self.users.get(uid, (True, datetime.now(), []))
         subscribers.append((access_token, weakref.ref(results)))
-        self.users[uid] = (ts, subscribers)
+        self.users[uid] = (True, ts, subscribers)
         return results
 
     def notify(self, subscribers, listens):
@@ -169,12 +169,13 @@ class UserTracker(object):
             log.debug("tick: %d users to process", len(self.users))
             now = datetime.now()
             access_token = None
-            for uid, (ts, subscribers) in self.users.items():
+            for uid, (im, ts, subscribers) in self.users.items():
                 if not self.notify(subscribers, []):
                     self.users.pop(uid)
                     continue
                 access_token = subscribers[0][0]
-                if now - ts > timedelta(seconds=60) or im:
+                if im or now - ts > timedelta(seconds=60):
+                    unixts = time.mktime(now.timetuple())
                     listens = [
                         Listen(
                             lid=item.get("id"),
@@ -183,7 +184,8 @@ class UserTracker(object):
                             ts=fb_datetime(item.get("end_time")))
                         for item in (fb[uid]["music.listens"]
                                 .using(access_token)
-                                .get(limit=10))]
+                                .get(since=unixts)
+                                .get("data", []))]
                     if not self.notify(subscribers, listens):
                         self.users.pop(uid)
                         continue
@@ -195,7 +197,7 @@ class WaveGenerator(object):
         self.uid = u.uid
         self.access_token = u.access_token
         self.db = DB()
-        self.results = Queue()
+        self.results = PriorityQueue()
 
     def fetch_friends(self):
         friends = self.db.friends(self.uid)
