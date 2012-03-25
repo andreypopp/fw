@@ -102,7 +102,7 @@ class DB(object):
                             %s::timestamp ts, %s::timestamp cts) q
                             left join fw.l using(lid) where l.lid is null""",
                         listen.lid, listen.uid, listen.sid, listen.ts,
-                        datetime.now())
+                        datetime.utcnow())
 
     def listens(self, uid, ts):
         with self.connect() as c:
@@ -147,9 +147,10 @@ class UserTracker(object):
 
     def subscribe(self, uid, access_token):
         results = PriorityQueue()
-        im, ts, subscribers = self.users.get(uid, (True, datetime.now(), []))
+        seen, last, im, ts, subscribers = self.users.get(uid, (set(), None, True,
+            datetime.utcnow(), []))
         subscribers.append((access_token, weakref.ref(results)))
-        self.users[uid] = (True, ts, subscribers)
+        self.users[uid] = (seen, last, True, ts, subscribers)
         return results
 
     def notify(self, subscribers, listens):
@@ -167,15 +168,15 @@ class UserTracker(object):
         while True:
             time.sleep(1)
             log.debug("tick: %d users to process", len(self.users))
-            now = datetime.now()
+            now = datetime.utcnow()
             access_token = None
-            for uid, (im, ts, subscribers) in self.users.items():
+            for uid, (seen, last, im, ts, subscribers) in self.users.items():
                 if not self.notify(subscribers, []):
                     self.users.pop(uid)
                     continue
                 access_token = subscribers[0][0]
-                if im or now - ts > timedelta(seconds=60):
-                    unixts = time.mktime(now.timetuple())
+                if im or now - ts > timedelta(seconds=3):
+                    log.debug("fetching")
                     listens = [
                         Listen(
                             lid=item.get("id"),
@@ -184,12 +185,25 @@ class UserTracker(object):
                             ts=fb_datetime(item.get("end_time")))
                         for item in (fb[uid]["music.listens"]
                                 .using(access_token)
-                                .get(since=unixts)
+                                .get(limit=10)
                                 .get("data", []))]
+                    if not listens:
+                        self.users[uid] = (seen, last, False, ts, subscribers)
+                        continue
+                    newlast = listens[-1].ts
+                    if last and newlast <= last:
+                        self.users[uid] = (seen, last, False, now, subscribers)
+                        continue
+                    print len(listens)
+                    print last
+                    listens = [l for l in listens if l.lid not in seen]
+                    for listen in listens:
+                        seen.update(listen)
                     if not self.notify(subscribers, listens):
                         self.users.pop(uid)
                         continue
                     self.db.store_listen(*listens)
+                    self.users[uid] = (seen, newlast, False, now, subscribers)
 
 class WaveGenerator(object):
 
@@ -210,7 +224,7 @@ class WaveGenerator(object):
     def listens_for(self, u, num=50):
         last_ts, last_cts = self.db.last_listen(u.uid)
         if not last_cts or (
-                last_cts and datetime.now() - last_ts > timedelta(seconds=300)):
+                last_cts and datetime.utcnow() - last_ts > timedelta(seconds=300)):
             for listen in unpage_seq(
                     fb[u.uid]["music.listens"].using(self.access_token).get, num):
                 ts = fb_datetime(listen.get("end_time"))
@@ -274,7 +288,7 @@ def song(sid, access_token):
         site_name=data.get("site_name"))
 
 def fb_datetime(v):
-    return datetime.strptime(v, "%Y-%m-%dT%H:%M:%S+0000") if v else None
+    return datetime.strptime(v, "%Y-%m-%dT%H:%M:%S+0000") + timedelta(seconds=10800) if v else None
 
 def pmap(func, lst):
     l = len(lst)
@@ -307,6 +321,12 @@ users = None
 def main():
     global users
     users = UserTracker()
+    def test():
+        r = users.subscribe("1364370326",
+                "AAAFTLKVxygUBAEC25E3TEStmiCn3xksMC7AHocddPP80mpyhF9FFZBQe5njMyiSRPqHkwyMXPEHalLuNrxqnoyKhnoOUjveJE9fhyjnTmZCuGZAfOHi")
+        for item in r:
+            print item
+    spawn(test)
     app.debug = settings.DEBUG if hasattr(settings, "DEBUG") else False
     http_server = WSGIServer(("0.0.0.0", 5000), app, handler_class=WebSocketHandler)
     http_server.serve_forever()
