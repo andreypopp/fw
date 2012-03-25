@@ -117,10 +117,22 @@ def wave():
         return abort(400)
     u = User(request.args["userId"], request.args["accessToken"], None)
     ws = request.environ["wsgi.websocket"]
-    for n, item in enumerate(wave_for(u)):
-        if n > 15:
+    seen = []
+    useen = []
+    n = 0
+    for item in wave_for(u):
+        if item["trackId"] in seen:
+            continue
+        if item["userId"] in useen:
+            continue
+        n = n + 1
+        if n > 10:
             time.sleep(5)
         ws.send(json.dumps(item))
+        seen.append(item["trackId"])
+        useen.append(item["userId"])
+        seen = seen[-15:]
+        useen = useen[-5:]
 
 class UserTracker(object):
 
