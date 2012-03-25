@@ -112,13 +112,10 @@ def wave():
         return abort(400)
     u = User(request.args["userId"], request.args["accessToken"], None)
     ws = request.environ["wsgi.websocket"]
-    seen = set()
     for n, item in enumerate(wave_for(u)):
-        if not item["trackId"] in seen:
-            if n > 15:
-                time.sleep(5)
-            ws.send(json.dumps(item))
-            seen.add(item["trackId"])
+        if n > 15:
+            time.sleep(5)
+        ws.send(json.dumps(item))
 
 class UserTracker(object):
 
@@ -137,26 +134,28 @@ class UserTracker(object):
         return results
 
     def notify(self, subscribers, listens):
-        for ref in subscribers[:]:
+        for access_token, ref in subscribers[:]:
             subscriber = ref()
             if not subscriber:
-                subscribers.remove(subscriber)
+                subscribers.remove((access_token, ref))
                 continue
             if listens:
                 for listen in listens:
                     subscriber.put(listen)
-        return bool(self.subscribers)
+        return bool(subscribers)
 
     def process(self):
         while True:
             time.sleep(1)
             log.debug("tick: %d users to process", len(self.users))
             now = datetime.now()
-            for uid, (ts, (access_token, subscribers)) in self.users.items():
+            access_token = None
+            for uid, (ts, subscribers) in self.users.items():
                 if not self.notify(subscribers, []):
                     self.users.pop(uid)
                     continue
-                if now - ts > timedelta(seconds=60):
+                access_token = subscribers[0][0]
+                if now - ts > timedelta(seconds=60) or im:
                     listens = [
                         Listen(
                             lid=item.get("id"),
