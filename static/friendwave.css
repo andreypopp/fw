@@ -12,12 +12,51 @@ body {
 }
 
 
+#logo {
+	position: absolute;
+	top: 30px;
+	left: 30px;
+	width: 60px;
+	z-index: 777;
+}
+
+#subtitle {
+  font-family: Helvetica, Arial, serif;
+	position: absolute;
+	top: 35px;
+	left: 100px;
+	z-index: 777;
+}
+
+.fb-like {
+	position: absolute;
+	top: 100px;
+	left: 30px;
+	z-index: 777;
+}
+
 #currPhoto,
 #nextPhoto {
 	display: none;
 	position: absolute;
-	top: 100px;
-	left: 300px;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+}
+
+
+#currArtist,
+#nextArtist {
+	color: white;
+	-webkit-text-stroke: 2px #000; /* stroke color and weight */
+	display: none;
+	position: absolute;
+	top: 5%;
+	right: 5%;
+	font-size: 5em;
+	font-family: "Arial Black";
 }
 
 
@@ -31,9 +70,9 @@ body {
 
 #currTrack,
 #nextTrack {
-	background-color: #fff;
+	background-color: rgba(100%,100%,100%,.5);
 	width: 250px;
-	height: 450px;
+	height: 530px;
 	overflow: hidden;
 	padding: 10px;
 	border: 1px solid #ccc;
@@ -48,21 +87,25 @@ body {
 
 #currTrack .friendPhoto,
 #nextTrack .friendPhoto {
-	height: 120px;
-	width: 120px;
+	width: 250px;
+	height: 200px;
 	overflow: hidden;
 	position: relative;
 }
 
-#currTrack .friendPhoto img,
-#nextTrack .friendPhoto img {
-	width: 120px;
-	height: 120px;
+#currTrack .horizontal img,
+#nextTrack .horizontal img {
+	height: 250px;
+}
+
+#currTrack .vertical img,
+#nextTrack .vertical img {
+	width: 250px;
 }
 
 #currTrack .friendName,
 #nextTrack .friendName {
-	width: 110px;
+	width: 250px;
 	color: #fff;
 	position: absolute;
 	bottom: 0;
@@ -73,6 +116,9 @@ body {
 
 #currTrack .coverSrc,
 #nextTrack .coverSrc {
+	width: 250px;
+	height: 250px;
+	overflow: hidden;
 	margin: 10px 0 5px 0;
 }
 
@@ -81,14 +127,15 @@ body {
 	width: 250px;
 }
 
-#currTrack .songName,
-#nextTrack .songName {
-	font-weight: bold;
+#currTrack .artistName,
+#nextTrack .artistName {
+	margin: 2px 0;
+	color: #333;
 }
 
 #currTrack .songName,
 #nextTrack .songName {
-	margin: 2px 0;
+	font-weight: bold;
 }
 
 
@@ -96,16 +143,16 @@ body {
 	position: absolute;
 	bottom: 0;
 	left: 300px;
-	height: 352px;
+	height: 332px;
 	overflow: hidden;
 	padding-left: 10px;
 }
 
 #playlist .track {
-	background-color: #fff;
+	background-color: rgba(100%,100%,100%,.5);
 	float: left;
 	width: 120px;
-	height: 320px;
+	height: 300px;
 	overflow: hidden;
 	margin: 0 20px 20px 0;
 	padding: 10px;
@@ -120,18 +167,22 @@ body {
 }
 
 #playlist .track .friendPhoto {
-	height: 120px;
+	height: 100px;
 	width: 120px;
 	overflow: hidden;
 	position: relative;
 }
 
-#playlist .track .friendPhoto img {
+#playlist .track .horizontal img {
+	height: 100px;
+}
+
+#playlist .track .vertical img {
 	width: 120px;
-	height: 120px;
 }
 
 #playlist .track .friendName {
+	text-align: left;
 	width: 110px;
 	color: #fff;
 	position: absolute;
@@ -142,6 +193,9 @@ body {
 }
 
 #playlist .track .coverSrc {
+	width: 120px;
+	height: 120px;
+	overflow: hidden;
 	margin: 10px 0 5px 0;
 }
 
@@ -149,10 +203,11 @@ body {
 	width: 120px;
 }
 
-#playlist .track .songName {
-	font-weight: bold;
+#playlist .track .artistName {
+	margin: 2px 0;
+	color: #333;
 }
 
 #playlist .track .songName {
-	margin: 2px 0;
+	font-weight: bold;
 }

@@ -43,7 +43,17 @@ tools.fadeIn = function(audio, rampTime) {
 
 	// Start volume ramp up when the audio actually stars to play (not when begins to buffer, etc.)
 	audio.addEventListener("playing", startRampUp);
-
+	
+	if ((audio.buffered != undefined) && (audio.buffered.length != 0)) {
+		var bb = parseInt(audio.buffered.end(0), 10);
+		//console.log(bb);
+		if (bb > 30) {
+			audio.currentTime = 30;
+		} else {
+			audio.currentTime = bb;
+		}
+	}
+	//audio.currentTime = 5; //jump to 30 sec
 	audio.play();
 };
 
@@ -98,3 +108,14 @@ String.prototype.supplant = function(o) {
         }
     );
 };
+
+function getParameterByName(name) {
+  name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+  var regexS = "[\\?&]" + name + "=([^&#]*)";
+  var regex = new RegExp(regexS);
+  var results = regex.exec(window.location.search);
+  if(results == null)
+    return "";
+  else
+    return decodeURIComponent(results[1].replace(/\+/g, " "));
+}

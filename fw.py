@@ -109,7 +109,12 @@ class DB(object):
             return [Listen(**r) for r
                 in c.execute("""
                     select lid, uid, sid, ts from fw.l
-                    where uid = %s and ts >= %s""", uid, ts)]
+                    where uid = %s order by ts desc""", uid)]
+
+    def has_listens(self, uid):
+        with self.connect() as c:
+            return c.execute("select true from fw.l where uid = %s limit 1",
+                    uid).scalar()
 
 @app.route("/wave")
 def wave():
@@ -122,13 +127,13 @@ def wave():
     seen = []
     useen = []
     n = 0
-    for item in wave_for(u):
+    for _, item in wave_for(u):
         if item["trackId"] in seen:
             continue
         if item["userId"] in useen:
             continue
         n = n + 1
-        if n > 10:
+        if n > 6:
             time.sleep(5)
         ws.send(json.dumps(item))
         seen.append(item["trackId"])
@@ -166,7 +171,7 @@ class UserTracker(object):
 
     def process(self):
         while True:
-            time.sleep(1)
+            time.sleep(2)
             log.debug("tick: %d users to process", len(self.users))
             now = datetime.utcnow()
             access_token = None
@@ -185,7 +190,7 @@ class UserTracker(object):
                             ts=fb_datetime(item.get("end_time")))
                         for item in (fb[uid]["music.listens"]
                                 .using(access_token)
-                                .get(limit=10)
+                                .get(limit=30)
                                 .get("data", []))]
                     if not listens:
                         self.users[uid] = (seen, last, False, ts, subscribers)
@@ -197,8 +202,9 @@ class UserTracker(object):
                     print len(listens)
                     print last
                     listens = [l for l in listens if l.lid not in seen]
+                    listens = reversed(sorted(listens, key=lambda l: l.ts))
                     for listen in listens:
-                        seen.update(listen)
+                        seen.add(listen)
                     if not self.notify(subscribers, listens):
                         self.users.pop(uid)
                         continue
@@ -221,24 +227,46 @@ class WaveGenerator(object):
             self.db.store_friends(self.uid, friends)
         return friends
 
+    def rt_listens_for(self, u):
+        rt_results = users.subscribe(u.uid, self.access_token)
+        for listen in rt_results:
+            if not self.db.has_song(listen.sid):
+                self.db.store_song(self.fetch_song(listen.sid))
+            t = self.db.match_song(listen.sid)
+            if t:
+                self.results.put((1, {
+                        "trackId": t.ztid,
+                        "userId": u.uid,
+                        "userName": u.uname,
+                        "src": t.surl,
+                        "songName": t.title,
+                        "artistName": t.artist_name,
+                        "artistPhoto": t.aimgurl,
+                        "coverSrc": t.rimgurl,
+                        "timestamp": listen.ts.strftime("%Y-%m-%dT%H:%M:%S+0000")
+                        }))
+
     def listens_for(self, u, num=50):
         last_ts, last_cts = self.db.last_listen(u.uid)
-        if not last_cts or (
-                last_cts and datetime.utcnow() - last_ts > timedelta(seconds=300)):
-            for listen in unpage_seq(
-                    fb[u.uid]["music.listens"].using(self.access_token).get, num):
-                ts = fb_datetime(listen.get("end_time"))
-                if last_ts and last_ts >= ts:
-                    break
-                listen = Listen(
-                    lid=listen.get("id"),
-                    uid=u.uid,
-                    sid=listen.get("data", {}).get("song", {}).get("id"),
-                    ts=ts)
-                self.db.store_listen(listen)
-                yield listen
-            self.db.update_cts(u.uid)
-        for listen in self.db.listens(u.uid, last_ts):
+       #if not last_cts or (
+       #        last_cts and datetime.utcnow() - last_ts > timedelta(seconds=300)):
+       #    for listen in unpage_seq(
+       #            fb[u.uid]["music.listens"].using(self.access_token).get, num):
+       #        ts = fb_datetime(listen.get("end_time"))
+       #        if last_ts and last_ts >= ts:
+       #            break
+       #        listen = Listen(
+       #            lid=listen.get("id"),
+       #            uid=u.uid,
+       #            sid=listen.get("data", {}).get("song", {}).get("id"),
+       #            ts=ts)
+       #        self.db.store_listen(listen)
+       #        yield listen
+       #    self.db.update_cts(u.uid)
+        time.sleep(2)
+        for n, listen in enumerate(self.db.listens(u.uid, last_ts)):
+            if n % 3 == 0:
+                time.sleep(1)
             yield listen
 
     def fetch_song(self, sid):
@@ -255,7 +283,7 @@ class WaveGenerator(object):
                 self.db.store_song(self.fetch_song(listen.sid))
             t = self.db.match_song(listen.sid)
             if t:
-                self.results.put({
+                self.results.put((10, {
                     "trackId": t.ztid,
                     "userId": u.uid,
                     "userName": u.uname,
@@ -265,11 +293,12 @@ class WaveGenerator(object):
                     "artistPhoto": t.aimgurl,
                     "coverSrc": t.rimgurl,
                     "timestamp": listen.ts.strftime("%Y-%m-%dT%H:%M:%S+0000")
-                    })
+                    }))
 
     def fetch(self):
         friends = self.fetch_friends()
         for f in friends:
+            spawn(self.rt_listens_for, f)
             spawn(self.fetch_listens, f)
 
     def __call__(self):
@@ -321,12 +350,6 @@ users = None
 def main():
     global users
     users = UserTracker()
-    def test():
-        r = users.subscribe("1364370326",
-                "AAAFTLKVxygUBAEC25E3TEStmiCn3xksMC7AHocddPP80mpyhF9FFZBQe5njMyiSRPqHkwyMXPEHalLuNrxqnoyKhnoOUjveJE9fhyjnTmZCuGZAfOHi")
-        for item in r:
-            print item
-    spawn(test)
     app.debug = settings.DEBUG if hasattr(settings, "DEBUG") else False
     http_server = WSGIServer(("0.0.0.0", 5000), app, handler_class=WebSocketHandler)
     http_server.serve_forever()

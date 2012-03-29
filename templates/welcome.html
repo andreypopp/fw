@@ -1,12 +1,22 @@
 <html>
   <head>
+  	<title>FriendWave</title>
     <link rel="stylesheet" href="static/friendwave.css"/>
+    <link rel="stylesheet" href="static/fw2.css"/>
+	<link rel="icon" href="/friendwave/static/fwico.png" type="image/x-icon" />
   </head>
   <body>
+  	<img id="logo" src="/friendwave/static/fw.png"/>
   	<div class="fb-login-button" data-scope="email,user_about_me,user_activities,friends_about_me,user_likes,friends_likes,user_interests,friends_interests,user_actions.music,friends_actions.music">Login with Facebook</div>
 
 <div id="currPhoto"></div>
 <div id="nextPhoto"></div>
+
+<!-- <div id="currPhoto2"></div>
+<div id="nextPhoto2"></div> -->
+
+<div id="currArtist"></div>
+<div id="nextArtist"></div>
 
 <div id="currTrack"></div>
 <div id="nextTrack"></div>
@@ -31,19 +41,29 @@
 			$('.fb-login-button').hide();
 			var uid = response.authResponse.userID;
 			var accessToken = response.authResponse.accessToken;
-			var started = false;
-			var count = 0;
-			var a = new WebSocket('ws://zvooq.ru:5000/wave?accessToken=' + accessToken + '&userId=' + uid);
-			a.onmessage = function(m) {
-				count = count + 1;
-				var data = jQuery.parseJSON(m.data);
+			
+			
+			var port = getParameterByName('debug') === '1' ? '5001' : '5000';
+			console.log(port);
+			function WS() {
+  var _self = this;
+  this.start = function() {
+    var ws;
+    ws = new WebSocket('ws://zvooq.ru:' + port + '/wave?accessToken=' + accessToken + '&userId=' + uid);					
+    ws.onmessage = function(m) {	
+      var data = jQuery.parseJSON(m.data);
 				//console.log(data);
 				player.addTrack(data);
-				if (!started && count > 1) {
-					player.start();
-					started = true;
-				}
-			};
+    };
+    ws.onclose = function(e) {
+      clearTimeout(_self.refresh);
+      setTimeout(_self.start, 1000);
+    }            
+  }
+  _self.start();
+} 
+new WS();
+			
 		}
       window.settings = {
         fbAppId: '372926196075013',
